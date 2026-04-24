@@ -35,19 +35,11 @@ public abstract class BaseGui {
 
     protected abstract void build();
 
-    protected void setItem(int slot, ItemStack stack) {
-        inventory.setStack(slot, stack);
-    }
+    protected void setItem(int slot, ItemStack stack) { inventory.setStack(slot, stack); }
 
     protected void setItem(int slot, ItemStack stack, Runnable onClick) {
         inventory.setStack(slot, stack);
         clickHandlers.put(slot, onClick);
-    }
-
-    protected void fill(ItemStack filler) {
-        for (int i = 0; i < rows * 9; i++) {
-            if (inventory.getStack(i).isEmpty()) inventory.setStack(i, filler);
-        }
     }
 
     protected void fillBorder(ItemStack filler) {
@@ -73,56 +65,44 @@ public abstract class BaseGui {
 
         player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
             (syncId, inv, p) -> new CobbleRankedScreenHandler(type, syncId, inv, inventory, rows),
-            Text.literal(colorize(title))
+            Text.literal(title.replace("&", "§"))
         ));
-    }
-
-    protected static String colorize(String s) {
-        return s.replace("&0","§0").replace("&1","§1").replace("&2","§2")
-                .replace("&3","§3").replace("&4","§4").replace("&5","§5")
-                .replace("&6","§6").replace("&7","§7").replace("&8","§8")
-                .replace("&9","§9").replace("&a","§a").replace("&b","§b")
-                .replace("&c","§c").replace("&d","§d").replace("&e","§e")
-                .replace("&f","§f").replace("&l","§l").replace("&r","§r");
     }
 
     public static class CobbleRankedScreenHandler extends GenericContainerScreenHandler {
 
-        public CobbleRankedScreenHandler(ScreenHandlerType<?> type, int syncId,
-                                          PlayerInventory playerInventory,
-                                          Inventory inventory, int rows) {
+        public CobbleRankedScreenHandler(ScreenHandlerType<?> type, int syncId, PlayerInventory playerInventory, Inventory inventory, int rows) {
             super(type, syncId, playerInventory, inventory, rows);
         }
 
         @Override
-        public void onSlotClick(int slotIndex, int button, net.minecraft.screen.slot.SlotActionType actionType,
-                                 PlayerEntity player) {
+        public void onSlotClick(int slotIndex, int button, net.minecraft.screen.slot.SlotActionType actionType, PlayerEntity player) {
             int guiSize = this.getRows() * 9;
             if (slotIndex >= 0 && slotIndex < guiSize) {
                 Map<Integer, Runnable> handlers = CLICK_MAPS.get(player.getUuid());
                 if (handlers != null) {
                     Runnable handler = handlers.get(slotIndex);
-                    if (handler != null) {
-                        handler.run();
-                        return;
-                    }
+                    if (handler != null) handler.run();
                 }
-                return;
+                // CORRECCIÓN 4: Fuerza la actualización visual para evitar Ítems Fantasma y pérdida de objetos
+                if (player instanceof ServerPlayerEntity spe) spe.currentScreenHandler.sendContentUpdates();
+                return; // Omite llamar al super, previniendo que agarren los items del GUI
             }
+            // Bloquea QuickMove (Shift+Click) desde el inventario del jugador hacia el GUI
+            if (actionType == net.minecraft.screen.slot.SlotActionType.QUICK_MOVE) return;
+            
+            super.onSlotClick(slotIndex, button, actionType, player);
         }
 
         @Override
         public boolean canUse(PlayerEntity player) { return true; }
 
         @Override
-        public ItemStack quickMove(PlayerEntity player, int slot) {
-            return ItemStack.EMPTY;
-        }
+        public ItemStack quickMove(PlayerEntity player, int slot) { return ItemStack.EMPTY; }
 
         @Override
         public void onClosed(PlayerEntity player) {
             super.onClosed(player);
-            // CORRECCIÓN: Prevención crítica de Memory Leak al cerrar el GUI
             CLICK_MAPS.remove(player.getUuid());
         }
     }

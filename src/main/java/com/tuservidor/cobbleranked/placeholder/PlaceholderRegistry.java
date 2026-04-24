@@ -20,16 +20,9 @@ public class PlaceholderRegistry {
             Class<?> textClass = Class.forName("net.minecraft.text.Text");
             Method literalMethod = textClass.getMethod("literal", String.class);
 
-            String[][] placeholders = {
-                {"elo",        "getElo"},
-                {"wins",       "getWins"},
-                {"losses",     "getLosses"},
-                {"streak",     "getWinStreak"}
-            };
+            String[] keys = {"elo", "wins", "losses", "streak"};
 
-            for (String[] entry : placeholders) {
-                final String key = entry[0];
-                final String getter = entry[1];
+            for (String key : keys) {
                 Object id = ofMethod.invoke(null, "cobbleranked", key);
                 Object handler = java.lang.reflect.Proxy.newProxyInstance(
                     handlerClass.getClassLoader(),
@@ -46,11 +39,17 @@ public class PlaceholderRegistry {
                         java.util.UUID uuid = (java.util.UUID) getUuid.invoke(player);
                         String name = ((net.minecraft.text.Text) getName.invoke(player)).getString();
                         
-                        // CORRECCIÓN: Usa el sistema optimizado que ya no inunda el disco
                         PlayerStats stats = StatsStorage.get(uuid, name);
-                        String val = String.valueOf(stats.getClass().getMethod(getter).invoke(stats));
-                        Object text = literalMethod.invoke(null, val);
-                        return valueMethod.invoke(null, text);
+                        String val = "0";
+                        // CORRECCIÓN 2: Acceso directo sin reflexión para evitar destrucción de TPS
+                        switch (key) {
+                            case "elo": val = String.valueOf(stats.getElo()); break;
+                            case "wins": val = String.valueOf(stats.getWins()); break;
+                            case "losses": val = String.valueOf(stats.getLosses()); break;
+                            case "streak": val = String.valueOf(stats.getWinStreak()); break;
+                        }
+                        
+                        return valueMethod.invoke(null, literalMethod.invoke(null, val));
                     }
                 );
                 registerMethod.invoke(null, id, handler);

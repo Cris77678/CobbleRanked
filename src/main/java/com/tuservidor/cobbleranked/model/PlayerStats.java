@@ -18,7 +18,6 @@ public class PlayerStats {
     private List<BattleRecord> history;
 
     public PlayerStats() {
-        // CORRECCIÓN: Respetar la configuración en lugar de hardcodear 1000
         this.elo = com.tuservidor.cobbleranked.CobbleRanked.config.getStartingElo();
         this.wins = 0;
         this.losses = 0;
@@ -50,7 +49,10 @@ public class PlayerStats {
 
     public void addBattleRecord(BattleRecord record) {
         history.add(0, record); 
-        if (history.size() > 20) history = history.subList(0, 20); 
+        if (history.size() > 20) {
+            // CORRECCIÓN 3: Envuelve la sublista en un nuevo ArrayList para evitar ConcurrentModificationException
+            history = new ArrayList<>(history.subList(0, 20)); 
+        }
     }
 
     @Data

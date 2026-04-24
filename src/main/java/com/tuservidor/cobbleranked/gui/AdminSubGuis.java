@@ -107,7 +107,7 @@ class AdminMembersGui extends BaseGui {
             return roleComp != 0 ? roleComp : a.getSlot() - b.getSlot();
         });
 
-        int[] slots = {10,11,12,13,14,15,16, 19,20,21,22,23,24,25, 28,29,30,31,32,33,34};
+        int[] slots = {10,11,12,13,14,15,16, 19,20,21,22,23,24,25, 28,29,30,31,32,33,34, 37,38,39,40,41,42,43};
         for (int i = 0; i < Math.min(all.size(), slots.length); i++) {
             LeagueMember m = all.get(i);
             setItem(slots[i], GuiItem.of(
@@ -158,7 +158,6 @@ class AdminSeasonGui extends BaseGui {
                 CobbleRanked.config.setCurrentSeason(season);
                 CobbleRanked.config.setSeasonName(name);
                 
-                // CORRECCIÓN: Estado guardado permanentemente
                 CobbleRanked.seasonActive = true;
                 CobbleRanked.config.setSeasonActive(true);
                 CobbleRanked.config.saveAsync();
@@ -222,7 +221,6 @@ class AdminConfigGui extends BaseGui {
     protected void build() {
         fillBorder(GuiItem.darkFiller());
 
-        // CORRECCIÓN: Se utiliza saveAsync() en lugar de init() para no congelar el servidor
         setItem(10, GuiItem.of(Items.GOLD_INGOT, "&6ELO Inicial", "&7Valor actual: &e" + CobbleRanked.config.getStartingElo(), "", "&aClick izq: &7+100   &cClick der: &7-100"));
         setItem(19, GuiItem.of(Items.LIME_DYE,  "&a+100 ELO Inicial"), () -> {
             CobbleRanked.config.setStartingElo(CobbleRanked.config.getStartingElo() + 100);
@@ -263,7 +261,6 @@ class AdminConfigGui extends BaseGui {
             CobbleRanked.config.saveAsync(); new AdminConfigGui(player).open();
         });
 
-        // Umbrales
         setItem(37, GuiItem.of(Items.IRON_INGOT, "&7Umbral Plata: &e" + CobbleRanked.config.getEloSilver(), "&8(ELO mínimo para Plata)", "&a+50 / &c-50"));
         setItem(38, GuiItem.of(Items.LIME_DYE, "&a+50 Umbral Plata"), () -> {
             CobbleRanked.config.setEloSilver(CobbleRanked.config.getEloSilver() + 50);
@@ -284,7 +281,6 @@ class AdminConfigGui extends BaseGui {
             CobbleRanked.config.saveAsync(); new AdminConfigGui(player).open();
         });
 
-        // CORRECCIÓN: Botones faltantes para configurar Diamante añadidos
         setItem(45, GuiItem.of(Items.DIAMOND, "&bUmbral Diamante: &e" + CobbleRanked.config.getEloDiamond(), "&8(ELO mínimo para Diamante)", "&a+50 / &c-50"));
         setItem(46, GuiItem.of(Items.LIME_DYE, "&a+50 Umbral Diamante"), () -> {
             CobbleRanked.config.setEloDiamond(CobbleRanked.config.getEloDiamond() + 50);
