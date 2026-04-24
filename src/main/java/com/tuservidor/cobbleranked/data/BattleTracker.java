@@ -107,8 +107,8 @@ public class BattleTracker {
             return Unit.INSTANCE;
         });
 
-        // FIX: Limpieza de RAM para batallas canceladas o empatadas sin evento de victoria
-        CobblemonEvents.BATTLE_FINISHED.subscribe(Priority.NORMAL, evt -> {
+        // FIX: Limpieza de RAM si los jugadores huyen o la batalla es cancelada forzosamente
+        CobblemonEvents.BATTLE_FLED.subscribe(Priority.NORMAL, evt -> {
             activeBattles.remove(evt.getBattle().getBattleId());
             return Unit.INSTANCE;
         });

@@ -78,7 +78,8 @@ public class LeagueBattleTracker {
             return Unit.INSTANCE;
         });
 
-        CobblemonEvents.BATTLE_FINISHED.subscribe(Priority.NORMAL, evt -> {
+        // FIX: Reemplazado BATTLE_FINISHED por BATTLE_FLED para compatibilidad y limpieza de RAM
+        CobblemonEvents.BATTLE_FLED.subscribe(Priority.NORMAL, evt -> {
             pending.remove(evt.getBattle().getBattleId());
             return Unit.INSTANCE;
         });
