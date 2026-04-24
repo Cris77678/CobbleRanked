@@ -5,38 +5,27 @@ import com.tuservidor.cobbleranked.CobbleRanked;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.io.IOException;
 import java.nio.file.*;
-import java.util.*;
 
 @Getter
 @Setter
 public class RankedConfig {
 
-    // ── ELO ──────────────────────────────────────────────────────────────────
     private int startingElo   = 1000;
     private int kFactor       = 32;
 
-    // ── Rank ELO thresholds (customizable) ───────────────────────────────────
     private int eloSilver   = 1000;
     private int eloGold     = 1500;
     private int eloDiamond  = 2000;
 
-    // ── Season ───────────────────────────────────────────────────────────────
     private int currentSeason = 1;
     private String seasonName = "Temporada 1";
+    private boolean isSeasonActive = false; // CORRECCIÓN: Estado guardado
 
-    // ── Battle validation ─────────────────────────────────────────────────────
-    /** Minimum party size to participate in ranked */
     private int minPartySize = 1;
-
-    /** Cooldown between ranked battles (seconds) */
     private int battleCooldownSeconds = 30;
-
-    // ── Leaderboard ───────────────────────────────────────────────────────────
     private int leaderboardSize = 10;
 
-    // ── Messages ──────────────────────────────────────────────────────────────
     private String prefix            = "&7[&6CobbleRanked&7] ";
     private String msgBattleStart    = "%prefix% &eBatalla ranked iniciada: &6%player1% &7vs &6%player2%&7.";
     private String msgBattleResult   = "%prefix% &6%winner% &aderrotó a &6%loser%&a. ELO: &e%winner_elo% &7(+%winner_delta%) &8| &e%loser_elo% &7(%loser_delta%)";
@@ -50,20 +39,38 @@ public class RankedConfig {
     private String msgNoStats        = "%prefix% &cNo se encontraron estadísticas para &e%player%&c.";
     private String msgReload         = "%prefix% &aConfiguración recargada.";
 
-    // ─────────────────────────────────────────────────────────────────────────
-
     public void init() {
         Path path = Path.of(CobbleRanked.CONFIG_PATH);
         var gson = new GsonBuilder().setPrettyPrinting().create();
         try {
             Files.createDirectories(path.getParent());
             if (Files.exists(path)) {
-                CobbleRanked.config = gson.fromJson(Files.readString(path), RankedConfig.class);
+                // CORRECCIÓN: Evitar crash por JsonSyntaxException
+                try {
+                    CobbleRanked.config = gson.fromJson(Files.readString(path), RankedConfig.class);
+                } catch (Exception e) {
+                    CobbleRanked.LOGGER.error("CRÍTICO: Error de sintaxis en config.json. Usando valores por defecto.", e);
+                    return; // Retorna para NO sobreescribir el archivo corrupto del usuario
+                }
             }
-            Files.writeString(path, gson.toJson(CobbleRanked.config));
-        } catch (IOException e) {
+            saveSync();
+        } catch (Exception e) {
             CobbleRanked.LOGGER.error("Failed to load config", e);
         }
+    }
+
+    public void saveSync() {
+        try {
+            var gson = new GsonBuilder().setPrettyPrinting().create();
+            Files.writeString(Path.of(CobbleRanked.CONFIG_PATH), gson.toJson(this));
+        } catch (Exception e) {
+            CobbleRanked.LOGGER.error("Failed to save config", e);
+        }
+    }
+
+    public void saveAsync() {
+        // CORRECCIÓN: Guardado asíncrono para GUIs
+        CobbleRanked.runAsync(this::saveSync);
     }
 
     public String format(String msg, Object... replacements) {

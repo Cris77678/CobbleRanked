@@ -25,7 +25,6 @@ public class BattleTracker {
 
     public static void register() {
 
-        // Battle start — register as ranked if 1v1 PvP and season is active
         CobblemonEvents.BATTLE_STARTED_POST.subscribe(Priority.NORMAL, evt -> {
             PokemonBattle battle = evt.getBattle();
             List<PlayerBattleActor> players = getPlayerActors(battle);
@@ -43,16 +42,12 @@ public class BattleTracker {
 
             if (playerA == null || playerB == null) return Unit.INSTANCE;
 
-            CobbleRanked.LOGGER.info("[BattleTracker] Battle started: {} vs {}",
-                playerA.getName().getString(), playerB.getName().getString());
-
-            // Verificar pareja confirmada en ambos ordenes (A→B o B→A)
             boolean isRankedPair = MatchmakingQueue.consumeRankedPair(playerA.getUuid(), playerB.getUuid())
                                 || MatchmakingQueue.consumeRankedPair(playerB.getUuid(), playerA.getUuid());
 
-            CobbleRanked.LOGGER.info("[BattleTracker] isRankedPair={}", isRankedPair);
-
             if (!isRankedPair) return Unit.INSTANCE;
+
+            cleanExpiredCooldowns(); // Limpieza de RAM
 
             if (isOnCooldown(playerA) || isOnCooldown(playerB)) {
                 sendMsg(playerA, CobbleRanked.config.format(
@@ -74,8 +69,6 @@ public class BattleTracker {
             );
             activeBattles.put(battle.getBattleId(), ranked);
 
-            CobbleRanked.LOGGER.info("[BattleTracker] Registered as RANKED battle: {}", battle.getBattleId());
-
             String msg = CobbleRanked.config.format(CobbleRanked.config.getMsgBattleStart(),
                 "%player1%", playerA.getName().getString(),
                 "%player2%", playerB.getName().getString());
@@ -85,7 +78,6 @@ public class BattleTracker {
             return Unit.INSTANCE;
         });
 
-        // Battle victory — process ELO
         CobblemonEvents.BATTLE_VICTORY.subscribe(Priority.NORMAL, evt -> {
             PokemonBattle battle = evt.getBattle();
             RankedBattle ranked = activeBattles.remove(battle.getBattleId());
@@ -116,10 +108,7 @@ public class BattleTracker {
         });
     }
 
-    // ── Battle result processing ──────────────────────────────────────────────
-
-    private static void processWin(UUID winnerUuid, String winnerName,
-                                    UUID loserUuid, String loserName) {
+    private static void processWin(UUID winnerUuid, String winnerName, UUID loserUuid, String loserName) {
         PlayerStats winner = StatsStorage.get(winnerUuid, winnerName);
         PlayerStats loser  = StatsStorage.get(loserUuid, loserName);
 
@@ -145,10 +134,7 @@ public class BattleTracker {
         StatsStorage.save(winner);
         StatsStorage.save(loser);
 
-        long cooldownEnd = System.currentTimeMillis()
-            + (CobbleRanked.config.getBattleCooldownSeconds() * 1000L);
-        cooldowns.put(winnerUuid, cooldownEnd);
-        cooldowns.put(loserUuid,  cooldownEnd);
+        applyCooldowns(winnerUuid, loserUuid);
 
         int winDelta  = newElos[0] - oldWinnerElo;
         int lossDelta = newElos[1] - oldLoserElo;
@@ -182,8 +168,22 @@ public class BattleTracker {
         StatsStorage.save(a);
         StatsStorage.save(b);
 
+        applyCooldowns(ranked.uuidA(), ranked.uuidB());
+
         broadcastAll(CobbleRanked.config.getPrefix()
             + "§7Empate entre §e" + ranked.nameA() + "§7 y §e" + ranked.nameB() + "§7.");
+    }
+
+    private static void applyCooldowns(UUID a, UUID b) {
+        long cooldownEnd = System.currentTimeMillis() + (CobbleRanked.config.getBattleCooldownSeconds() * 1000L);
+        cooldowns.put(a, cooldownEnd);
+        cooldowns.put(b, cooldownEnd);
+        cleanExpiredCooldowns();
+    }
+
+    public static void cleanExpiredCooldowns() {
+        long now = System.currentTimeMillis();
+        cooldowns.entrySet().removeIf(e -> now >= e.getValue());
     }
 
     private static void checkRankChange(ServerPlayerEntity player, Rank oldRank, Rank newRank) {
@@ -196,8 +196,6 @@ public class BattleTracker {
                 "%player%", player.getName().getString(), "%rank%", newRank.formatted());
         broadcastAll(msg);
     }
-
-    // ── Cooldown helpers ──────────────────────────────────────────────────────
 
     public static boolean isOnCooldown(ServerPlayerEntity player) {
         Long expiry = cooldowns.get(player.getUuid());
@@ -215,8 +213,6 @@ public class BattleTracker {
         return Math.max(0, (expiry - System.currentTimeMillis()) / 1000);
     }
 
-    // ── Utils ─────────────────────────────────────────────────────────────────
-
     private static List<PlayerBattleActor> getPlayerActors(PokemonBattle battle) {
         List<PlayerBattleActor> result = new ArrayList<>();
         for (BattleActor actor : battle.getActors()) {
@@ -227,13 +223,11 @@ public class BattleTracker {
 
     private static void broadcastAll(String msg) {
         CobbleRanked.server.execute(() ->
-            CobbleRanked.server.getPlayerManager().broadcast(
-                Text.literal(colorize(msg)), false));
+            CobbleRanked.server.getPlayerManager().broadcast(Text.literal(colorize(msg)), false));
     }
 
     private static void sendMsg(ServerPlayerEntity player, String msg) {
-        CobbleRanked.server.execute(() ->
-            player.sendMessage(Text.literal(colorize(msg))));
+        CobbleRanked.server.execute(() -> player.sendMessage(Text.literal(colorize(msg))));
     }
 
     private static String colorize(String s) {

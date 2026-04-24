@@ -51,7 +51,6 @@ public class CobbleRanked implements ModInitializer {
     public void onInitialize() {
         LOGGER.info("CobbleRanked loading...");
 
-        // Tick events MUST be registered in onInitialize, not SERVER_STARTED
         MatchmakingQueue.register();
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, env) -> {
@@ -64,23 +63,22 @@ public class CobbleRanked implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(srv -> {
             server = srv;
             config.init();
+            
+            // CORRECCIÓN: Carga la temporada correctamente desde disco
+            seasonActive = config.isSeasonActive();
+            
             EloCalculator.setKFactor(config.getKFactor());
             BattleTracker.register();
 
-            // League system
             LeagueStorage.load();
             LeagueBattleTracker.register();
 
-            // Try to register PlaceholderAPI if available
             try {
                 PlaceholderRegistry.register();
-            } catch (NoClassDefFoundError ignored) {
-                LOGGER.info("PlaceholderAPI not installed - placeholders disabled.");
-            }
+            } catch (NoClassDefFoundError ignored) {}
 
             LOGGER.info("CobbleRanked ready! Season: {} | Active: {} | League members: {}",
-                config.getSeasonName(), seasonActive,
-                LeagueStorage.getAllMembers().size());
+                config.getSeasonName(), seasonActive, LeagueStorage.getAllMembers().size());
         });
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, srv) -> {
@@ -90,7 +88,6 @@ public class CobbleRanked implements ModInitializer {
             BaseGui.CLICK_MAPS.remove(handler.player.getUuid());
         });
 
-        ServerLifecycleEvents.SERVER_STOPPED.register(srv ->
-            EXECUTOR.shutdown());
+        ServerLifecycleEvents.SERVER_STOPPED.register(srv -> EXECUTOR.shutdown());
     }
 }

@@ -26,7 +26,6 @@ public class StatsStorage {
         });
     }
 
-    // CORRECCIÓN: Método nuevo para buscar jugadores offline desde comandos
     public static PlayerStats getByName(String name) {
         for (PlayerStats stats : cache.values()) {
             if (stats.getLastName().equalsIgnoreCase(name)) return stats;
@@ -76,23 +75,25 @@ public class StatsStorage {
     }
 
     public static void resetAll(int newSeason) {
-        try {
-            Path dir = Path.of(DATA_DIR);
-            if (!Files.exists(dir)) return;
-            Files.list(dir).forEach(p -> {
-                try {
-                    PlayerStats s = GSON.fromJson(Files.readString(p), PlayerStats.class);
-                    if (s == null) return;
-                    s.setElo(CobbleRanked.config.getStartingElo());
-                    s.setWins(0); s.setLosses(0); s.setDraws(0); s.setWinStreak(0);
-                    s.setSeason(newSeason); s.getHistory().clear();
-                    Files.writeString(p, GSON.toJson(s));
-                    cache.put(s.getUuid(), s);
-                } catch (Exception ignored) {}
-            });
-        } catch (IOException e) {
-            CobbleRanked.LOGGER.error("Error resetting season", e);
-        }
+        CobbleRanked.runAsync(() -> {
+            try {
+                Path dir = Path.of(DATA_DIR);
+                if (!Files.exists(dir)) return;
+                Files.list(dir).forEach(p -> {
+                    try {
+                        PlayerStats s = GSON.fromJson(Files.readString(p), PlayerStats.class);
+                        if (s == null) return;
+                        s.setElo(CobbleRanked.config.getStartingElo());
+                        s.setWins(0); s.setLosses(0); s.setDraws(0); s.setWinStreak(0);
+                        s.setSeason(newSeason); s.getHistory().clear();
+                        Files.writeString(p, GSON.toJson(s));
+                        cache.put(s.getUuid(), s);
+                    } catch (Exception ignored) {}
+                });
+            } catch (IOException e) {
+                CobbleRanked.LOGGER.error("Error resetting season", e);
+            }
+        });
     }
 
     private static PlayerStats load(UUID uuid) {
@@ -103,7 +104,6 @@ public class StatsStorage {
     }
 
     private static void saveAsync(PlayerStats stats) {
-        // CORRECCIÓN: Prevención de Spam. No guarda archivos de jugadores que solo se conectaron sin jugar
         if (stats.getTotalGames() == 0 && stats.getElo() == CobbleRanked.config.getStartingElo()) {
             return; 
         }

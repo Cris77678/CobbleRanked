@@ -20,14 +20,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class LeagueBattleTracker {
 
     private static final ConcurrentHashMap<UUID, PendingLeagueBattle> pending = new ConcurrentHashMap<>();
-    
-    // CORRECCIÓN: Reemplazado Set de UUID por un Mapa con Expiración para prevenir Memory Leaks
-    private static final ConcurrentHashMap<UUID, Long> manualBattles = new ConcurrentHashMap<>();
-    private static final long MANUAL_TIMEOUT_MS = 300_000L; // 5 minutos de validez
+    private static final ConcurrentHashMap<UUID, ExpiringChallenge> manualBattles = new ConcurrentHashMap<>();
+    private static final long MANUAL_TIMEOUT_MS = 300_000L; // 5 minutos
 
     public static void register() {
         CobblemonEvents.BATTLE_STARTED_POST.subscribe(Priority.NORMAL, evt -> {
-            cleanupStaleManualBattles(); // Ejecuta limpieza preventiva
+            cleanupStaleManualBattles();
 
             PokemonBattle battle = evt.getBattle();
             List<PlayerBattleActor> players = getPlayerActors(battle);
@@ -46,7 +44,12 @@ public class LeagueBattleTracker {
             if (!aIsLeague && !bIsLeague) return Unit.INSTANCE;
 
             boolean confirmedByQueue = MatchmakingQueue.consumeLeaguePair(uuidA, uuidB);
-            boolean confirmedManual  = manualBattles.remove(uuidA) != null | manualBattles.remove(uuidB) != null;
+            
+            boolean confirmedManual = false;
+            ExpiringChallenge ecA = manualBattles.remove(uuidA);
+            if (ecA != null && ecA.targetUuid().equals(uuidB)) confirmedManual = true;
+            ExpiringChallenge ecB = manualBattles.remove(uuidB);
+            if (ecB != null && ecB.targetUuid().equals(uuidA)) confirmedManual = true;
 
             if (!confirmedByQueue && !confirmedManual) return Unit.INSTANCE;
 
@@ -96,12 +99,10 @@ public class LeagueBattleTracker {
 
     public static void confirmForAutoDetect(UUID challengerUuid, UUID memberUuid) {
         long expiry = System.currentTimeMillis() + MANUAL_TIMEOUT_MS;
-        manualBattles.put(challengerUuid, expiry);
-        manualBattles.put(memberUuid, expiry);
+        manualBattles.put(challengerUuid, new ExpiringChallenge(memberUuid, expiry));
     }
 
-    public static void registerManual(UUID challengerUuid, String challengerName,
-                                       LeagueMember member, boolean challengerWon) {
+    public static void registerManual(UUID challengerUuid, String challengerName, LeagueMember member, boolean challengerWon) {
         LeagueBattle battle = new LeagueBattle(challengerUuid, challengerName, member, 
             challengerWon ? LeagueBattle.Result.WIN : LeagueBattle.Result.LOSS);
         LeagueStorage.recordBattle(battle);
@@ -110,7 +111,7 @@ public class LeagueBattleTracker {
 
     private static void cleanupStaleManualBattles() {
         long now = System.currentTimeMillis();
-        manualBattles.entrySet().removeIf(entry -> now > entry.getValue());
+        manualBattles.entrySet().removeIf(entry -> now > entry.getValue().expiryTime());
     }
 
     private static void announceResult(String challengerName, LeagueMember member, boolean challengerWon) {
@@ -146,5 +147,6 @@ public class LeagueBattleTracker {
         return s.replace("&0","§0").replace("&1","§1").replace("&2","§2").replace("&a","§a").replace("&c","§c").replace("&e","§e").replace("&6","§6").replace("&7","§7").replace("&l","§l").replace("&r","§r");
     }
 
+    private record ExpiringChallenge(UUID targetUuid, long expiryTime) {}
     private record PendingLeagueBattle(UUID battleId, UUID challengerUuid, String challengerName, LeagueMember member) {}
 }

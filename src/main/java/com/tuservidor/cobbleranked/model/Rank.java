@@ -1,44 +1,37 @@
 package com.tuservidor.cobbleranked.model;
 
-/**
- * Ranked tiers with ELO thresholds and display info.
- */
+import com.tuservidor.cobbleranked.CobbleRanked;
+
 public enum Rank {
 
-    BRONCE  ("Bronce",   "§c",  "⚔",    0,    999),
-    PLATA   ("Plata",    "§7",  "⚔⚔",   1000, 1499),
-    ORO     ("Oro",      "§6",  "⚔⚔⚔",  1500, 1999),
-    DIAMANTE("Diamante", "§b",  "💎",   2000, Integer.MAX_VALUE);
+    BRONCE  ("Bronce",   "§c",  "⚔"),
+    PLATA   ("Plata",    "§7",  "⚔⚔"),
+    ORO     ("Oro",      "§6",  "⚔⚔⚔"),
+    DIAMANTE("Diamante", "§b",  "💎");
 
     private final String displayName;
     private final String color;
     private final String icon;
-    private final int minElo;
-    private final int maxElo;
 
-    Rank(String displayName, String color, String icon, int minElo, int maxElo) {
+    Rank(String displayName, String color, String icon) {
         this.displayName = displayName;
         this.color = color;
         this.icon = icon;
-        this.minElo = minElo;
-        this.maxElo = maxElo;
     }
 
     public String getDisplayName() { return displayName; }
     public String getColor()       { return color; }
     public String getIcon()        { return icon; }
-    public int getMinElo()         { return minElo; }
-    public int getMaxElo()         { return maxElo; }
 
-    /** Full colored display: e.g. "§6Oro ⚔⚔⚔" */
     public String formatted() {
         return color + displayName + " " + icon;
     }
 
+    // CORRECCIÓN: Ahora obedece a la configuración en tiempo real
     public static Rank fromElo(int elo) {
-        for (Rank r : values()) {
-            if (elo >= r.minElo && elo <= r.maxElo) return r;
-        }
+        if (elo >= CobbleRanked.config.getEloDiamond()) return DIAMANTE;
+        if (elo >= CobbleRanked.config.getEloGold())    return ORO;
+        if (elo >= CobbleRanked.config.getEloSilver())  return PLATA;
         return BRONCE;
     }
 }
