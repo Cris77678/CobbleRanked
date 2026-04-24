@@ -10,6 +10,7 @@ import com.tuservidor.cobbleranked.league.battle.LeagueBattleTracker;
 import com.tuservidor.cobbleranked.league.data.LeagueStorage;
 import com.tuservidor.cobbleranked.league.model.LeagueBattle;
 import com.tuservidor.cobbleranked.league.model.LeagueMember;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -22,19 +23,19 @@ import java.util.*;
  * /league — Pokémon League management and battle system.
  *
  * ── Admin commands (op level 2 or cobbleranked.admin) ──────────────────────
- *   /league add gym    <player> <slot 1-8> <type>   – Register gym leader
- *   /league add elite  <player> <slot 1-4> <type>   – Register Elite Four member
- *   /league add champ  <player>             <type>   – Register Champion
- *   /league remove     <player>                      – Remove from league (announces)
+ * /league add gym    <player> <slot 1-8> <type>   – Register gym leader
+ * /league add elite  <player> <slot 1-4> <type>   – Register Elite Four member
+ * /league add champ  <player>             <type>   – Register Champion
+ * /league remove     <player>                      – Remove from league (announces)
  *
  * ── Battle commands ─────────────────────────────────────────────────────────
- *   /league battle <member> <win|loss>               – Manually record a battle result
- *       (self = challenger, member = who was challenged)
+ * /league battle <member> <win|loss>               – Manually record a battle result
+ * (self = challenger, member = who was challenged)
  *
  * ── Info commands ───────────────────────────────────────────────────────────
- *   /league list                                     – Show full league roster
- *   /league info <player>                            – Show member stats
- *   /league history [player]                         – Show recent battles
+ * /league list                                     – Show full league roster
+ * /league info <player>                            – Show member stats
+ * /league history [player]                         – Show recent battles
  */
 public class LeagueCommand {
 
@@ -152,8 +153,9 @@ public class LeagueCommand {
         );
 
         // ── /league battle <member> <win|loss> ────────────────────────────────
+        // CORRECCIÓN: Restringido a administradores para evitar que jugadores normales regitren victorias falsas.
         base.then(CommandManager.literal("battle")
-            .requires(src -> src.isExecutedByPlayer())
+            .requires(LeagueCommand::isAdmin) 
             .then(CommandManager.argument("member", StringArgumentType.word())
                 .suggests(MEMBER_SUGGESTIONS)
                 .then(CommandManager.argument("result", StringArgumentType.word())
@@ -207,7 +209,7 @@ public class LeagueCommand {
                 "§e/league list §7- Ver la liga completa\n" +
                 "§e/league info <jugador> §7- Ver info de un miembro\n" +
                 "§e/league history [jugador] §7- Historial de batallas\n" +
-                "§e/league battle <miembro> <win|loss> §7- Registrar resultado\n" +
+                "§e/league battle <miembro> <win|loss> §7- Registrar resultado manual\n" +
                 "§7§o(Admins)\n" +
                 "§e/league add gym <jugador> <slot 1-8> <tipo> §7- Añadir líder\n" +
                 "§e/league add elite <jugador> <slot 1-4> <tipo> §7- Añadir Alto Mando\n" +
@@ -231,6 +233,17 @@ public class LeagueCommand {
         }
 
         UUID uuid = target.getUuid();
+
+        // CORRECCIÓN: Evitar duplicados. Verificar si el slot ya está ocupado por OTRA persona
+        List<LeagueMember> existingMembers = LeagueStorage.getMembersByRole(role);
+        for (LeagueMember m : existingMembers) {
+            if (m.getSlot() == slot && !m.getUuid().equals(uuid)) {
+                sendMsg(src, CobbleRanked.config.getPrefix()
+                    + "§cEl puesto #" + slot + " ya está ocupado por " + m.getName() 
+                    + ". Usa /league remove primero.");
+                return 0;
+            }
+        }
 
         // If already a member, update them
         boolean isUpdate = LeagueStorage.isMember(uuid);
@@ -468,14 +481,20 @@ public class LeagueCommand {
     private static boolean isAdmin(ServerCommandSource src) {
         if (!src.isExecutedByPlayer()) return true;
         if (src.hasPermissionLevel(2)) return true;
+        
+        if (FabricLoader.getInstance().isModLoaded("luckperms")) {
+            return checkLuckPerms(src);
+        }
+        return false;
+    }
+
+    private static boolean checkLuckPerms(ServerCommandSource src) {
         try {
             var player = src.getPlayer();
             if (player == null) return false;
-            var lp = net.luckperms.api.LuckPermsProvider.get()
-                .getUserManager().getUser(player.getUuid());
-            return lp != null && lp.getCachedData().getPermissionData()
-                .checkPermission("cobbleranked.admin").asBoolean();
-        } catch (Exception e) { return false; }
+            var lp = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(player.getUuid());
+            return lp != null && lp.getCachedData().getPermissionData().checkPermission("cobbleranked.admin").asBoolean();
+        } catch (Throwable t) { return false; }
     }
 
     private static void sendMsg(ServerCommandSource src, String msg) {
