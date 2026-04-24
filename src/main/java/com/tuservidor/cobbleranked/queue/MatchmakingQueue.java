@@ -46,13 +46,27 @@ public class MatchmakingQueue {
         return true;
     }
 
+    public static boolean leave(UUID uuid, QueueType type) { 
+        return queueFor(type).remove(uuid) != null; 
+    }
+
     public static void leaveAll(UUID uuid) { 
         rankedQueue.remove(uuid); 
         leagueQueue.remove(uuid); 
     }
 
-    public static boolean isInQueue(UUID uuid, QueueType type) { return queueFor(type).containsKey(uuid); }
-    public static int queueSize(QueueType type) { return queueFor(type).size(); }
+    public static boolean isInQueue(UUID uuid, QueueType type) { 
+        return queueFor(type).containsKey(uuid); 
+    }
+
+    // EL MÉTODO FALTANTE QUE CAUSABA EL ERROR:
+    public static boolean isInAnyQueue(UUID uuid) { 
+        return rankedQueue.containsKey(uuid) || leagueQueue.containsKey(uuid); 
+    }
+
+    public static int queueSize(QueueType type) { 
+        return queueFor(type).size(); 
+    }
 
     public static boolean consumeRankedPair(UUID a, UUID b) {
         if (confirmedRanked.containsKey(a) && confirmedRanked.get(a).equals(b)) {
@@ -95,7 +109,6 @@ public class MatchmakingQueue {
         }
     }
 
-    // Método para expulsar líderes que son removidos por admin
     public static void forceEjectLeagueMember(UUID uuid) {
         leagueQueue.remove(uuid);
         clearConfirmed(uuid);
@@ -108,7 +121,6 @@ public class MatchmakingQueue {
         List<ServerPlayerEntity> online = new ArrayList<>();
         for (UUID uuid : new ArrayList<>(rankedQueue.keySet())) {
             ServerPlayerEntity p = CobbleRanked.server.getPlayerManager().getPlayer(uuid);
-            // CORRECCIÓN: Filtro de estado (Espectador/Muerto)
             if (p == null || p.isSpectator() || !p.isAlive()) { rankedQueue.remove(uuid); continue; }
             online.add(p);
         }
@@ -125,7 +137,6 @@ public class MatchmakingQueue {
                 if (matched.contains(b.getUuid())) continue;
                 if (!a.getWorld().getRegistryKey().getValue().equals(b.getWorld().getRegistryKey().getValue())) continue;
 
-                // CORRECCIÓN: Cálculo de distancia 3D (X, Y, Z)
                 double dx = a.getX()-b.getX(), dy = a.getY()-b.getY(), dz = a.getZ()-b.getZ();
                 double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
                 
@@ -185,7 +196,10 @@ public class MatchmakingQueue {
         sendTo(m.getUuid(), p + "§d§l¡Retador! §r§e" + ch.getName().getString() + " §7quiere retarte §8(" + d + "m)\n§7Usa §e/battle " + ch.getName().getString());
     }
 
-    private static ConcurrentHashMap<UUID, QueueEntry> queueFor(QueueType type) { return type == QueueType.RANKED ? rankedQueue : leagueQueue; }
+    private static ConcurrentHashMap<UUID, QueueEntry> queueFor(QueueType type) { 
+        return type == QueueType.RANKED ? rankedQueue : leagueQueue; 
+    }
+
     private static void sendTo(UUID uuid, String msg) { 
         CobbleRanked.server.execute(() -> { 
             ServerPlayerEntity p = CobbleRanked.server.getPlayerManager().getPlayer(uuid); 
