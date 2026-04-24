@@ -25,37 +25,36 @@ public class BattleTracker {
 
     public static void register() {
 
+        // Evento: Inicio de Batalla
         CobblemonEvents.BATTLE_STARTED_POST.subscribe(Priority.NORMAL, evt -> {
             PokemonBattle battle = evt.getBattle();
             List<PlayerBattleActor> players = getPlayerActors(battle);
 
             if (players.size() != 2) return Unit.INSTANCE;
             if (!CobbleRanked.seasonActive) {
-                CobbleRanked.LOGGER.info("[BattleTracker] Battle ignored — no active season.");
+                CobbleRanked.LOGGER.info("[BattleTracker] Batalla ignorada — no hay temporada activa.");
                 return Unit.INSTANCE;
             }
 
-            PlayerBattleActor actorA = players.get(0);
-            PlayerBattleActor actorB = players.get(1);
-            ServerPlayerEntity playerA = actorA.getEntity();
-            ServerPlayerEntity playerB = actorB.getEntity();
+            ServerPlayerEntity playerA = players.get(0).getEntity();
+            ServerPlayerEntity playerB = players.get(1).getEntity();
 
             if (playerA == null || playerB == null) return Unit.INSTANCE;
 
-            boolean isRankedPair = MatchmakingQueue.consumeRankedPair(playerA.getUuid(), playerB.getUuid())
-                                || MatchmakingQueue.consumeRankedPair(playerB.getUuid(), playerA.getUuid());
+            // Validar si el emparejamiento viene de la cola Ranked
+            boolean isRankedPair = MatchmakingQueue.consumeRankedPair(playerA.getUuid(), playerB.getUuid());
 
             if (!isRankedPair) return Unit.INSTANCE;
 
-            cleanExpiredCooldowns(); // Limpieza de RAM
+            cleanExpiredCooldowns();
 
             if (isOnCooldown(playerA) || isOnCooldown(playerB)) {
                 sendMsg(playerA, CobbleRanked.config.format(
                     CobbleRanked.config.getMsgCooldown(), "%time%",
-                    String.valueOf(BattleTracker.getCooldownSeconds(playerA))));
+                    String.valueOf(getCooldownSeconds(playerA))));
                 sendMsg(playerB, CobbleRanked.config.format(
                     CobbleRanked.config.getMsgCooldown(), "%time%",
-                    String.valueOf(BattleTracker.getCooldownSeconds(playerB))));
+                    String.valueOf(getCooldownSeconds(playerB))));
                 return Unit.INSTANCE;
             }
 
@@ -78,6 +77,7 @@ public class BattleTracker {
             return Unit.INSTANCE;
         });
 
+        // Evento: Victoria/Fin de Batalla
         CobblemonEvents.BATTLE_VICTORY.subscribe(Priority.NORMAL, evt -> {
             PokemonBattle battle = evt.getBattle();
             RankedBattle ranked = activeBattles.remove(battle.getBattleId());
@@ -106,6 +106,25 @@ public class BattleTracker {
             processWin(winnerUuid, winnerName, loserUuid, loserName);
             return Unit.INSTANCE;
         });
+
+        // FIX: Limpieza de RAM para batallas canceladas o empatadas sin evento de victoria
+        CobblemonEvents.BATTLE_FINISHED.subscribe(Priority.NORMAL, evt -> {
+            activeBattles.remove(evt.getBattle().getBattleId());
+            return Unit.INSTANCE;
+        });
+    }
+
+    // FIX: Combat Logging - Penaliza al jugador que se desconecta en medio de una batalla
+    public static void handleDisconnect(ServerPlayerEntity player) {
+        for (RankedBattle b : activeBattles.values()) {
+            if (b.uuidA().equals(player.getUuid()) || b.uuidB().equals(player.getUuid())) {
+                UUID winnerUuid = b.uuidA().equals(player.getUuid()) ? b.uuidB() : b.uuidA();
+                String winnerName = b.uuidA().equals(player.getUuid()) ? b.nameB() : b.nameA();
+                processWin(winnerUuid, winnerName, player.getUuid(), player.getName().getString());
+                activeBattles.remove(b.battleId());
+                break;
+            }
+        }
     }
 
     private static void processWin(UUID winnerUuid, String winnerName, UUID loserUuid, String loserName) {
@@ -227,7 +246,9 @@ public class BattleTracker {
     }
 
     private static void sendMsg(ServerPlayerEntity player, String msg) {
-        CobbleRanked.server.execute(() -> player.sendMessage(Text.literal(colorize(msg))));
+        if (player != null) {
+            CobbleRanked.server.execute(() -> player.sendMessage(Text.literal(colorize(msg))));
+        }
     }
 
     private static String colorize(String s) {

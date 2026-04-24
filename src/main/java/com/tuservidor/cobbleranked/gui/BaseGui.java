@@ -77,6 +77,12 @@ public abstract class BaseGui {
 
         @Override
         public void onSlotClick(int slotIndex, int button, net.minecraft.screen.slot.SlotActionType actionType, PlayerEntity player) {
+            // BLOQUEO ANTI-ROBO TOTAL: Previene THROW (Q), SWAP (1-9), CLONE (Click Central)
+            if (actionType != net.minecraft.screen.slot.SlotActionType.PICKUP) {
+                if (player instanceof ServerPlayerEntity spe) spe.currentScreenHandler.sendContentUpdates();
+                return; 
+            }
+
             int guiSize = this.getRows() * 9;
             if (slotIndex >= 0 && slotIndex < guiSize) {
                 Map<Integer, Runnable> handlers = CLICK_MAPS.get(player.getUuid());
@@ -84,13 +90,9 @@ public abstract class BaseGui {
                     Runnable handler = handlers.get(slotIndex);
                     if (handler != null) handler.run();
                 }
-                // CORRECCIÓN 4: Fuerza la actualización visual para evitar Ítems Fantasma y pérdida de objetos
                 if (player instanceof ServerPlayerEntity spe) spe.currentScreenHandler.sendContentUpdates();
-                return; // Omite llamar al super, previniendo que agarren los items del GUI
+                return; 
             }
-            // Bloquea QuickMove (Shift+Click) desde el inventario del jugador hacia el GUI
-            if (actionType == net.minecraft.screen.slot.SlotActionType.QUICK_MOVE) return;
-            
             super.onSlotClick(slotIndex, button, actionType, player);
         }
 

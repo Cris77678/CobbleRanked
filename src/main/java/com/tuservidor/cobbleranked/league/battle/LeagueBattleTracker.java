@@ -25,39 +25,36 @@ public class LeagueBattleTracker {
 
     public static void register() {
         CobblemonEvents.BATTLE_STARTED_POST.subscribe(Priority.NORMAL, evt -> {
-            cleanupStaleManualBattles();
-
+            cleanupStale();
             PokemonBattle battle = evt.getBattle();
             List<PlayerBattleActor> players = getPlayerActors(battle);
             if (players.size() != 2) return Unit.INSTANCE;
 
-            ServerPlayerEntity playerA = players.get(0).getEntity();
-            ServerPlayerEntity playerB = players.get(1).getEntity();
-            if (playerA == null || playerB == null) return Unit.INSTANCE;
+            ServerPlayerEntity pA = players.get(0).getEntity();
+            ServerPlayerEntity pB = players.get(1).getEntity();
+            if (pA == null || pB == null) return Unit.INSTANCE;
 
-            UUID uuidA = playerA.getUuid(), uuidB = playerB.getUuid();
-            boolean aIsLeague = LeagueStorage.isMember(uuidA), bIsLeague = LeagueStorage.isMember(uuidB);
-            if (!aIsLeague && !bIsLeague) return Unit.INSTANCE;
-
-            boolean confirmedByQueue = MatchmakingQueue.consumeLeaguePair(uuidA, uuidB);
-            boolean confirmedManual = false;
+            UUID uA = pA.getUuid(); UUID uB = pB.getUuid();
+            boolean isQueue = MatchmakingQueue.consumeLeaguePair(uA, uB);
             
-            ExpiringChallenge ecA = manualBattles.remove(uuidA);
-            if (ecA != null && ecA.targetUuid().equals(uuidB)) confirmedManual = true;
-            ExpiringChallenge ecB = manualBattles.remove(uuidB);
-            if (ecB != null && ecB.targetUuid().equals(uuidA)) confirmedManual = true;
+            boolean isManual = false;
+            ExpiringChallenge ecA = manualBattles.remove(uA);
+            if (ecA != null && ecA.targetUuid().equals(uB)) isManual = true;
+            ExpiringChallenge ecB = manualBattles.remove(uB);
+            if (ecB != null && ecB.targetUuid().equals(uA)) isManual = true;
 
-            if (!confirmedByQueue && !confirmedManual) return Unit.INSTANCE;
+            if (!isQueue && !isManual) return Unit.INSTANCE;
 
-            UUID memberUuid = aIsLeague ? uuidA : uuidB;
-            UUID challengerUuid = aIsLeague ? uuidB : uuidA;
-            String challengerName = aIsLeague ? playerB.getName().getString() : playerA.getName().getString();
+            boolean aIsM = LeagueStorage.isMember(uA);
+            UUID mUuid = aIsM ? uA : uB;
+            UUID cUuid = aIsM ? uB : uA;
+            String cName = aIsM ? pB.getName().getString() : pA.getName().getString();
 
-            LeagueMember member = LeagueStorage.getMember(memberUuid).orElse(null);
+            LeagueMember member = LeagueStorage.getMember(mUuid).orElse(null);
             if (member == null) return Unit.INSTANCE;
 
-            pending.put(battle.getBattleId(), new PendingLeagueBattle(battle.getBattleId(), challengerUuid, challengerName, member));
-            broadcast(CobbleRanked.config.getPrefix() + "§e" + challengerName + " §7reta al " + member.getRoleLabel() + " §7" + member.getName() + "§7!");
+            pending.put(battle.getBattleId(), new PendingLeagueBattle(battle.getBattleId(), cUuid, cName, member));
+            broadcast("§d§l" + cName + " §r§7reta al " + member.getRoleLabel() + " §e" + member.getName());
             return Unit.INSTANCE;
         });
 
@@ -66,61 +63,68 @@ public class LeagueBattleTracker {
             if (pb == null) return Unit.INSTANCE;
 
             List<BattleActor> winners = new ArrayList<>(evt.getWinners());
-            if (winners.isEmpty()) return Unit.INSTANCE; 
+            if (winners.isEmpty()) return Unit.INSTANCE;
 
-            UUID winnerUuid = null;
-            for (BattleActor actor : winners) {
-                if (actor instanceof PlayerBattleActor pba && pba.getEntity() != null) {
-                    winnerUuid = pba.getEntity().getUuid(); break;
+            UUID winner = null;
+            for (BattleActor a : winners) {
+                if (a instanceof PlayerBattleActor pba && pba.getEntity() != null) {
+                    winner = pba.getEntity().getUuid(); break;
                 }
             }
-            if (winnerUuid == null) return Unit.INSTANCE;
+            if (winner == null) return Unit.INSTANCE;
 
-            boolean challengerWon = winnerUuid.equals(pb.challengerUuid());
-            LeagueBattle leagueBattle = new LeagueBattle(pb.challengerUuid(), pb.challengerName(), pb.member(), challengerWon ? LeagueBattle.Result.WIN : LeagueBattle.Result.LOSS);
-            LeagueStorage.recordBattle(leagueBattle);
-            announceResult(pb.challengerName(), pb.member(), challengerWon);
+            boolean win = winner.equals(pb.challengerUuid());
+            recordResult(pb.challengerUuid(), pb.challengerName(), pb.member(), win);
             return Unit.INSTANCE;
         });
 
-        // CORRECCIÓN 10: Limpia la memoria RAM si la batalla es cancelada forzosamente o hay empate
         CobblemonEvents.BATTLE_FINISHED.subscribe(Priority.NORMAL, evt -> {
             pending.remove(evt.getBattle().getBattleId());
             return Unit.INSTANCE;
         });
     }
 
-    public static void confirmForAutoDetect(UUID challengerUuid, UUID memberUuid) {
-        manualBattles.put(challengerUuid, new ExpiringChallenge(memberUuid, System.currentTimeMillis() + MANUAL_TIMEOUT_MS));
+    public static void handleDisconnect(ServerPlayerEntity p) {
+        for (PendingLeagueBattle b : pending.values()) {
+            if (b.challengerUuid().equals(p.getUuid())) {
+                recordResult(b.challengerUuid(), b.challengerName(), b.member(), false);
+                pending.remove(b.battleId()); break;
+            } else if (b.member().getUuid().equals(p.getUuid())) {
+                recordResult(b.challengerUuid(), b.challengerName(), b.member(), true);
+                pending.remove(b.battleId()); break;
+            }
+        }
     }
 
-    public static void registerManual(UUID challengerUuid, String challengerName, LeagueMember member, boolean challengerWon) {
-        LeagueStorage.recordBattle(new LeagueBattle(challengerUuid, challengerName, member, challengerWon ? LeagueBattle.Result.WIN : LeagueBattle.Result.LOSS));
-        announceResult(challengerName, member, challengerWon);
+    public static void confirmForAutoDetect(UUID c, UUID m) {
+        manualBattles.put(c, new ExpiringChallenge(m, System.currentTimeMillis() + MANUAL_TIMEOUT_MS));
     }
 
-    private static void cleanupStaleManualBattles() {
-        long now = System.currentTimeMillis();
-        manualBattles.entrySet().removeIf(entry -> now > entry.getValue().expiryTime());
+    public static void registerManual(UUID c, String cn, LeagueMember m, boolean win) {
+        recordResult(c, cn, m, win);
     }
 
-    private static void announceResult(String challengerName, LeagueMember member, boolean challengerWon) {
-        if (challengerWon) broadcast(buildVictoryAnnouncement(challengerName, member));
-        else broadcast(CobbleRanked.config.getPrefix() + member.getRole().getColor() + member.getName() + " §7derrotó a §e" + challengerName + " §7y defendió su puesto!");
+    private static void recordResult(UUID c, String cn, LeagueMember m, boolean win) {
+        LeagueBattle lb = new LeagueBattle(c, cn, m, win ? LeagueBattle.Result.WIN : LeagueBattle.Result.LOSS);
+        LeagueStorage.recordBattle(lb);
+        if (win) broadcast("§6§l¡VICTORIA! §e" + cn + " §7venció al " + m.getRoleLabel() + " §e" + m.getName());
+        else broadcast("§c" + m.getName() + " §7defendió su puesto contra §e" + cn);
     }
 
-    public static String buildVictoryAnnouncement(String challengerName, LeagueMember member) {
-        String icon = member.getRole() == LeagueMember.Role.GYM_LEADER ? "🏅" : member.getRole() == LeagueMember.Role.ELITE_FOUR ? "💜" : "👑";
-        return "\n§6§l" + icon + " ¡VICTORIA DE LIGA! " + icon + "\n§e§l" + challengerName + " §r§7ha vencido al " + member.getRoleLabel() + " §7" + member.getName() + "!\n" + (member.getRole() == LeagueMember.Role.CHAMPION ? "§6§l¡" + challengerName + " ES EL NUEVO CAMPEÓN! 👑\n" : "");
+    private static void cleanupStale() {
+        manualBattles.entrySet().removeIf(e -> System.currentTimeMillis() > e.getValue().expiryTime());
     }
 
-    private static List<PlayerBattleActor> getPlayerActors(PokemonBattle battle) {
-        List<PlayerBattleActor> result = new ArrayList<>();
-        for (BattleActor actor : battle.getActors()) if (actor instanceof PlayerBattleActor pba) result.add(pba);
-        return result;
+    private static List<PlayerBattleActor> getPlayerActors(PokemonBattle b) {
+        List<PlayerBattleActor> res = new ArrayList<>();
+        for (BattleActor a : b.getActors()) if (a instanceof PlayerBattleActor pba) res.add(pba);
+        return res;
     }
 
-    private static void broadcast(String msg) { CobbleRanked.server.execute(() -> CobbleRanked.server.getPlayerManager().broadcast(Text.literal(msg.replace("&", "§")), false)); }
+    private static void broadcast(String m) {
+        CobbleRanked.server.execute(() -> CobbleRanked.server.getPlayerManager().broadcast(Text.literal(m), false));
+    }
+
     private record ExpiringChallenge(UUID targetUuid, long expiryTime) {}
     private record PendingLeagueBattle(UUID battleId, UUID challengerUuid, String challengerName, LeagueMember member) {}
 }

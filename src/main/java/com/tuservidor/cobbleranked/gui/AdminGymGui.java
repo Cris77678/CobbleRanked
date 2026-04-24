@@ -4,27 +4,28 @@ import com.tuservidor.cobbleranked.league.data.LeagueStorage;
 import com.tuservidor.cobbleranked.league.model.LeagueMember;
 import net.minecraft.item.Items;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
 
 import java.util.List;
 
 public class AdminGymGui extends BaseGui {
 
     public AdminGymGui(ServerPlayerEntity player) {
-        super(player, 4, "&a&lGimnasios — Gestionar Líderes");
+        super(player, 6, "&a&lGimnasios — Gestionar");
     }
 
     @Override
     protected void build() {
-        fillBorder(GuiItem.filler());
+        fillBorder(GuiItem.darkFiller());
 
         List<LeagueMember> gyms = LeagueStorage.getMembersByRole(LeagueMember.Role.GYM_LEADER);
+        
+        // FIX 10: Array extendido para dar lugar físico a 18 gimnasios en la interfaz
+        int[] slots = {10,11,12,13,14,15,16, 19,20,21,22,23,24,25, 28,29,30,31}; 
 
-        for (int slot = 1; slot <= 8; slot++) {
-            int guiSlot = 9 + slot;
+        for (int slot = 1; slot <= 18; slot++) {
             final int gymSlot = slot;
-            LeagueMember found = gyms.stream()
-                .filter(m -> m.getSlot() == gymSlot).findFirst().orElse(null);
+            int guiSlot = slots[slot - 1];
+            LeagueMember found = gyms.stream().filter(m -> m.getSlot() == gymSlot).findFirst().orElse(null);
 
             if (found != null) {
                 final LeagueMember member = found;
@@ -32,38 +33,20 @@ public class AdminGymGui extends BaseGui {
                     "&a#" + slot + " &f" + found.getName(),
                     "&7Tipo: &e" + found.getType(),
                     "&7V: &a" + found.getWins() + " &7D: &c" + found.getLosses(),
-                    "",
-                    "&cClick para QUITAR de la liga"
+                    "", "&cClick para QUITAR"
                 ), () -> {
                     LeagueStorage.removeMember(member.getUuid());
-                    broadcastRemove(member);
+                    com.tuservidor.cobbleranked.queue.MatchmakingQueue.forceEjectLeagueMember(member.getUuid());
                     new AdminGymGui(player).open();
                 });
             } else {
                 setItem(guiSlot, GuiItem.of(Items.GRAY_DYE,
                     "&8#" + slot + " Vacante",
-                    "&7No hay líder en este gimnasio",
-                    "",
-                    "&7Para añadir un líder usa:",
-                    "&e/league add gym <jugador> " + slot + " <tipo>"
+                    "&7Añadir: /league add gym <j> " + slot + " <tipo>"
                 ));
             }
         }
 
-        setItem(31, GuiItem.of(GuiItem.BACK, "&7← Volver al Panel",
-            "&7Regresa al panel de administración"
-        ), () -> new AdminMainGui(player).open());
-    }
-
-    private void broadcastRemove(LeagueMember member) {
-        // CORRECCIÓN: Usar directamente la instancia global importada, evitando hacks estáticos.
-        com.tuservidor.cobbleranked.CobbleRanked.server.execute(() ->
-            com.tuservidor.cobbleranked.CobbleRanked.server.getPlayerManager().broadcast(
-                Text.literal("\n§6§l🏅 CAMBIO EN LA LIGA 🏅\n"
-                    + member.getRole().getColor() + "§l" + member.getName()
-                    + " §r§7ha dejado su puesto de §aLíder #" + member.getSlot()
-                    + " §7(" + member.getType() + ")§7.\n"
-                    + "§7¡El Gimnasio #" + member.getSlot() + " está vacante!\n"),
-                false));
+        setItem(49, GuiItem.of(GuiItem.BACK, "&7← Volver al Panel"), () -> new AdminMainGui(player).open());
     }
 }

@@ -21,7 +21,7 @@ public class LeagueStorage {
     private static final String MEMBERS_FILE = LEAGUE_DIR + "members.json";
     private static final String BATTLES_FILE = LEAGUE_DIR + "battles.json";
     private static final int    MAX_BATTLES  = 200;
-
+    private static final Object FILE_LOCK = new Object();
     private static final ConcurrentHashMap<UUID, LeagueMember> members = new ConcurrentHashMap<>();
     private static final List<LeagueBattle> battles = Collections.synchronizedList(new ArrayList<>());
 
@@ -117,28 +117,28 @@ public class LeagueStorage {
 
     private static void saveMembers() {
         CobbleRanked.runAsync(() -> {
-            try {
-                Map<String, LeagueMember> raw = new LinkedHashMap<>();
-                members.forEach((k, v) -> raw.put(k.toString(), v));
-                Files.writeString(Path.of(MEMBERS_FILE), GSON.toJson(raw));
-            } catch (IOException e) {
-                CobbleRanked.LOGGER.error("[League] Failed to save members", e);
+            synchronized (FILE_LOCK) {
+                try {
+                    Map<String, LeagueMember> raw = new LinkedHashMap<>();
+                    members.forEach((k, v) -> raw.put(k.toString(), v));
+                    Files.writeString(Path.of(MEMBERS_FILE), GSON.toJson(raw));
+                } catch (IOException e) {
+                    CobbleRanked.LOGGER.error("[League] Failed to save members", e);
+                }
             }
         });
     }
 
     private static void saveBattles() {
-        // CORRECCIÓN: Snapshot inmutable para thread-safety. Evita ConcurrentModificationException.
         List<LeagueBattle> snapshot;
-        synchronized (battles) {
-            snapshot = new ArrayList<>(battles);
-        }
+        synchronized (battles) { snapshot = new ArrayList<>(battles); }
         CobbleRanked.runAsync(() -> {
-            try {
-                Files.writeString(Path.of(BATTLES_FILE), GSON.toJson(snapshot));
-            } catch (IOException e) {
-                CobbleRanked.LOGGER.error("[League] Failed to save battles", e);
+            synchronized (FILE_LOCK) {
+                try {
+                    Files.writeString(Path.of(BATTLES_FILE), GSON.toJson(snapshot));
+                } catch (IOException e) {
+                    CobbleRanked.LOGGER.error("[League] Failed to save battles", e);
+                }
             }
         });
     }
-}
