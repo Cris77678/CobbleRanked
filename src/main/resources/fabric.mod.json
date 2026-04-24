@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "cobbleranked",
+  "version": "${version}",
+  "name": "CobbleRanked",
+  "description": "Ranked battle system for Cobblemon servers.",
+  "authors": ["TuServidor"],
+  "license": "All-Rights-Reserved",
+  "environment": "server",
+  "entrypoints": {
+    "main": ["com.tuservidor.cobbleranked.CobbleRanked"]
+  },
+  "depends": {
+    "fabricloader": ">=0.17.2",
+    "fabric-api": "*",
+    "cobblemon": ">=1.7.3",
+    "minecraft": "1.21.1"
+  },
+  "suggests": {
+    "placeholder-api": "*"
+  }
+}
