@@ -62,9 +62,17 @@ public class PlayerStatsGui extends BaseGui {
         Rank current = stats.getRank();
         Rank[] values = Rank.values();
         int ord = current.ordinal();
+        
         if (ord == values.length - 1) return "&6¡Rango máximo!";
+        
         Rank next = values[ord + 1];
-        int needed = next.getMinElo() - stats.getElo();
+        int minNext = 0;
+        
+        if (next == Rank.PLATA) minNext = CobbleRanked.config.getEloSilver();
+        else if (next == Rank.ORO) minNext = CobbleRanked.config.getEloGold();
+        else if (next == Rank.DIAMANTE) minNext = CobbleRanked.config.getEloDiamond();
+        
+        int needed = minNext - stats.getElo();
         return "&7Siguiente rango: " + next.formatted() + " &8(&e" + needed + " ELO&8)";
     }
 }
