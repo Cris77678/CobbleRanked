@@ -21,8 +21,10 @@ public class LeaderboardGui extends BaseGui {
         List<PlayerStats> top = StatsStorage.getLeaderboard(
             CobbleRanked.config.getLeaderboardSize());
 
-        // Slots 10-16, 19-25, 28-34 (inner 7×3 = 21 slots, use first 10)
-        int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21};
+        // CORRECCIÓN: Añadidas todas las celdas disponibles para soportar Tops de mayor tamaño
+        int[] slots = {10, 11, 12, 13, 14, 15, 16, 
+                       19, 20, 21, 22, 23, 24, 25, 
+                       28, 29, 30, 31, 32, 33, 34};
 
         for (int i = 0; i < Math.min(top.size(), slots.length); i++) {
             PlayerStats s = top.get(i);
@@ -48,7 +50,6 @@ public class LeaderboardGui extends BaseGui {
             ));
         }
 
-        // Back
         setItem(49, GuiItem.of(GuiItem.BACK, "&7← Volver",
             "&7Regresa al menú principal"
         ), () -> new PlayerMainGui(player).open());

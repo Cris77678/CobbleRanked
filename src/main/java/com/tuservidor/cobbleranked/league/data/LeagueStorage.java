@@ -14,13 +14,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/**
- * Handles persistence for league members and battle history.
- *
- * Files:
- *   config/cobbleranked/league/members.json   – map of UUID → LeagueMember
- *   config/cobbleranked/league/battles.json   – list of last 200 LeagueBattles
- */
 public class LeagueStorage {
 
     private static final Gson   GSON       = new GsonBuilder().setPrettyPrinting().create();
@@ -29,21 +22,12 @@ public class LeagueStorage {
     private static final String BATTLES_FILE = LEAGUE_DIR + "battles.json";
     private static final int    MAX_BATTLES  = 200;
 
-    // ── In-memory caches ──────────────────────────────────────────────────────
-
-    /** UUID → LeagueMember */
     private static final ConcurrentHashMap<UUID, LeagueMember> members = new ConcurrentHashMap<>();
-
-    /** Recent battles (newest first) */
     private static final List<LeagueBattle> battles = Collections.synchronizedList(new ArrayList<>());
-
-    // ── Init ──────────────────────────────────────────────────────────────────
 
     public static void load() {
         try {
             Files.createDirectories(Path.of(LEAGUE_DIR));
-
-            // Load members
             Path mPath = Path.of(MEMBERS_FILE);
             if (Files.exists(mPath)) {
                 Type type = new TypeToken<Map<String, LeagueMember>>(){}.getType();
@@ -51,24 +35,18 @@ public class LeagueStorage {
                 if (raw != null) {
                     raw.forEach((k, v) -> members.put(UUID.fromString(k), v));
                 }
-                CobbleRanked.LOGGER.info("[League] Loaded {} league members.", members.size());
             }
 
-            // Load battles
             Path bPath = Path.of(BATTLES_FILE);
             if (Files.exists(bPath)) {
                 Type type = new TypeToken<List<LeagueBattle>>(){}.getType();
                 List<LeagueBattle> loaded = GSON.fromJson(Files.readString(bPath), type);
                 if (loaded != null) battles.addAll(loaded);
-                CobbleRanked.LOGGER.info("[League] Loaded {} battle records.", battles.size());
             }
-
         } catch (IOException e) {
             CobbleRanked.LOGGER.error("[League] Failed to load data", e);
         }
     }
-
-    // ── Members API ───────────────────────────────────────────────────────────
 
     public static void addMember(LeagueMember member) {
         members.put(member.getUuid(), member);
@@ -106,10 +84,7 @@ public class LeagueStorage {
             .collect(Collectors.toList());
     }
 
-    // ── Battles API ───────────────────────────────────────────────────────────
-
     public static void recordBattle(LeagueBattle battle) {
-        // Update member win/loss stats
         getMember(battle.getMemberUuid()).ifPresent(m -> {
             if (battle.challengerWon()) m.setLosses(m.getLosses() + 1);
             else                        m.setWins(m.getWins() + 1);
@@ -140,8 +115,6 @@ public class LeagueStorage {
         }
     }
 
-    // ── Persistence ───────────────────────────────────────────────────────────
-
     private static void saveMembers() {
         CobbleRanked.runAsync(() -> {
             try {
@@ -155,11 +128,14 @@ public class LeagueStorage {
     }
 
     private static void saveBattles() {
+        // CORRECCIÓN: Snapshot inmutable para thread-safety. Evita ConcurrentModificationException.
+        List<LeagueBattle> snapshot;
+        synchronized (battles) {
+            snapshot = new ArrayList<>(battles);
+        }
         CobbleRanked.runAsync(() -> {
             try {
-                synchronized (battles) {
-                    Files.writeString(Path.of(BATTLES_FILE), GSON.toJson(battles));
-                }
+                Files.writeString(Path.of(BATTLES_FILE), GSON.toJson(snapshot));
             } catch (IOException e) {
                 CobbleRanked.LOGGER.error("[League] Failed to save battles", e);
             }

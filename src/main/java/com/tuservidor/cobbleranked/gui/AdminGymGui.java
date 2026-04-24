@@ -8,9 +8,6 @@ import net.minecraft.text.Text;
 
 import java.util.List;
 
-/**
- * Shows 8 gym leader slots. Click occupied slot → remove. Click empty → prompt.
- */
 public class AdminGymGui extends BaseGui {
 
     public AdminGymGui(ServerPlayerEntity player) {
@@ -23,7 +20,6 @@ public class AdminGymGui extends BaseGui {
 
         List<LeagueMember> gyms = LeagueStorage.getMembersByRole(LeagueMember.Role.GYM_LEADER);
 
-        // Slots 10-17 for gym 1-8
         for (int slot = 1; slot <= 8; slot++) {
             int guiSlot = 9 + slot;
             final int gymSlot = slot;
@@ -41,7 +37,7 @@ public class AdminGymGui extends BaseGui {
                 ), () -> {
                     LeagueStorage.removeMember(member.getUuid());
                     broadcastRemove(member);
-                    new AdminGymGui(player).open(); // refresh
+                    new AdminGymGui(player).open();
                 });
             } else {
                 setItem(guiSlot, GuiItem.of(Items.GRAY_DYE,
@@ -54,29 +50,20 @@ public class AdminGymGui extends BaseGui {
             }
         }
 
-        // Back
         setItem(31, GuiItem.of(GuiItem.BACK, "&7← Volver al Panel",
             "&7Regresa al panel de administración"
         ), () -> new AdminMainGui(player).open());
     }
 
     private void broadcastRemove(LeagueMember member) {
-        CobbleRanked.server.execute(() ->
-            CobbleRanked.server.getPlayerManager().broadcast(
+        // CORRECCIÓN: Usar directamente la instancia global importada, evitando hacks estáticos.
+        com.tuservidor.cobbleranked.CobbleRanked.server.execute(() ->
+            com.tuservidor.cobbleranked.CobbleRanked.server.getPlayerManager().broadcast(
                 Text.literal("\n§6§l🏅 CAMBIO EN LA LIGA 🏅\n"
                     + member.getRole().getColor() + "§l" + member.getName()
                     + " §r§7ha dejado su puesto de §aLíder #" + member.getSlot()
                     + " §7(" + member.getType() + ")§7.\n"
                     + "§7¡El Gimnasio #" + member.getSlot() + " está vacante!\n"),
                 false));
-    }
-
-    // Reference CobbleRanked for server access
-    private static com.tuservidor.cobbleranked.CobbleRanked CobbleRanked;
-    static { try { CobbleRanked = null; } catch (Exception ignored) {} }
-
-    // Use the static field directly
-    private static net.minecraft.server.MinecraftServer getServer() {
-        return com.tuservidor.cobbleranked.CobbleRanked.server;
     }
 }

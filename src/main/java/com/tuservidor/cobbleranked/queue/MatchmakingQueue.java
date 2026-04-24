@@ -28,13 +28,8 @@ public class MatchmakingQueue {
             tickCounter++;
             if (tickCounter < TICK_INTERVAL) return;
             tickCounter = 0;
-            if (rankedQueue.size() + leagueQueue.size() > 0) {
-                CobbleRanked.LOGGER.info("[Queue] Tick — Ranked: {} | League: {}",
-                    rankedQueue.size(), leagueQueue.size());
-            }
             runMatchmaker();
         });
-        CobbleRanked.LOGGER.info("[Queue] Matchmaking registered.");
     }
 
     public static boolean join(ServerPlayerEntity player, QueueType type) {
@@ -46,8 +41,6 @@ public class MatchmakingQueue {
             player.getUuid(), player.getName().getString(), elo, type,
             worldId, player.getX(), player.getY(), player.getZ(),
             System.currentTimeMillis()));
-        CobbleRanked.LOGGER.info("[Queue] {} joined {} queue. Size: {}",
-            player.getName().getString(), type.getDisplayName(), queue.size());
         return true;
     }
 
@@ -58,14 +51,12 @@ public class MatchmakingQueue {
     public static int queueSize(QueueType type) { return queueFor(type).size(); }
 
     public static boolean consumeRankedPair(UUID a, UUID b) {
-        // Check A→B
         UUID s = confirmedRanked.get(a);
         if (s != null && s.equals(b)) {
             confirmedRanked.remove(a);
             confirmedRanked.remove(b);
             return true;
         }
-        // Check B→A (CobblemonExtras may deliver players in reverse order)
         UUID s2 = confirmedRanked.get(b);
         if (s2 != null && s2.equals(a)) {
             confirmedRanked.remove(a);
@@ -82,8 +73,25 @@ public class MatchmakingQueue {
     }
 
     public static void clearConfirmed(UUID uuid) {
-        UUID ro = confirmedRanked.remove(uuid); if (ro != null) confirmedRanked.remove(ro);
-        UUID lo = confirmedLeague.remove(uuid); if (lo != null) confirmedLeague.remove(lo);
+        // CORRECCIÓN: Rescate del limbo. Reingresar al oponente inocente si su rival se desconecta.
+        UUID ro = confirmedRanked.remove(uuid); 
+        if (ro != null) {
+            confirmedRanked.remove(ro);
+            ServerPlayerEntity opponent = CobbleRanked.server.getPlayerManager().getPlayer(ro);
+            if(opponent != null) {
+                join(opponent, QueueType.RANKED);
+                sendTo(ro, "§cTu oponente se desconectó. Has vuelto a la cola automáticamente.");
+            }
+        }
+        UUID lo = confirmedLeague.remove(uuid); 
+        if (lo != null) {
+            confirmedLeague.remove(lo);
+            ServerPlayerEntity opponent = CobbleRanked.server.getPlayerManager().getPlayer(lo);
+            if(opponent != null) {
+                if(!LeagueStorage.isMember(lo)) join(opponent, QueueType.LEAGUE);
+                sendTo(lo, "§cEl combate se canceló por desconexión.");
+            }
+        }
     }
 
     private static void runMatchmaker() { tryMatchRanked(); tryMatchLeague(); }
@@ -95,9 +103,8 @@ public class MatchmakingQueue {
         for (UUID uuid : new ArrayList<>(rankedQueue.keySet())) {
             ServerPlayerEntity p = CobbleRanked.server.getPlayerManager().getPlayer(uuid);
             if (p == null) { rankedQueue.remove(uuid); continue; }
-            online.add(p); // todos pueden jugar ranked, incluso miembros de liga
+            online.add(p);
         }
-        CobbleRanked.LOGGER.info("[Queue] tryMatchRanked — {} eligible players", online.size());
         if (online.size() < 2) return;
 
         online.sort(Comparator.comparingInt(p ->
@@ -113,22 +120,13 @@ public class MatchmakingQueue {
 
                 Identifier wa = a.getWorld().getRegistryKey().getValue();
                 Identifier wb = b.getWorld().getRegistryKey().getValue();
-                if (!wa.equals(wb)) {
-                    CobbleRanked.LOGGER.info("[Queue] {} vs {} — worlds differ: {} / {}",
-                        a.getName().getString(), b.getName().getString(), wa, wb);
-                    continue;
-                }
+                if (!wa.equals(wb)) continue;
 
                 double dx = a.getX()-b.getX(), dz = a.getZ()-b.getZ();
                 double dist = Math.sqrt(dx*dx + dz*dz);
-                CobbleRanked.LOGGER.info("[Queue] {} vs {} — dist: {} (max {})",
-                    a.getName().getString(), b.getName().getString(),
-                    String.format("%.1f", dist), MAX_DISTANCE);
 
                 if (dist > MAX_DISTANCE) continue;
 
-                CobbleRanked.LOGGER.info("[Queue] RANKED MATCH: {} vs {}",
-                    a.getName().getString(), b.getName().getString());
                 matched.add(a.getUuid()); matched.add(b.getUuid());
                 rankedQueue.remove(a.getUuid()); rankedQueue.remove(b.getUuid());
                 confirmedRanked.put(a.getUuid(), b.getUuid());
@@ -206,10 +204,6 @@ public class MatchmakingQueue {
 
     private static String colorize(String s) {
         return s.replace("&0","§0").replace("&1","§1").replace("&2","§2")
-                .replace("&3","§3").replace("&4","§4").replace("&5","§5")
-                .replace("&6","§6").replace("&7","§7").replace("&8","§8")
-                .replace("&9","§9").replace("&a","§a").replace("&b","§b")
-                .replace("&c","§c").replace("&d","§d").replace("&e","§e")
-                .replace("&f","§f").replace("&l","§l").replace("&r","§r");
+                .replace("&3","§3").replace("&4","§4").replace("&5","§5");
     }
 }

@@ -10,20 +10,6 @@ import com.tuservidor.cobbleranked.queue.MatchmakingQueue;
 import com.tuservidor.cobbleranked.queue.QueueType;
 import net.minecraft.server.network.ServerPlayerEntity;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-
-/**
- * §6§lCobbleRanked — Menú Principal  (5 rows)
- *
- * Layout (row × col):
- *   Row 0: border
- *   Row 1: [STATS] [LEADERBOARD] [LEAGUE] [HISTORY] [QUEUE]
- *   Row 2: (empty inner)
- *   Row 3: (empty inner)
- *   Row 4: border (close in center)
- */
 public class PlayerMainGui extends BaseGui {
 
     public PlayerMainGui(ServerPlayerEntity player) {
@@ -37,90 +23,64 @@ public class PlayerMainGui extends BaseGui {
         PlayerStats stats = StatsStorage.get(player.getUuid(), player.getName().getString());
         Rank rank = stats.getRank();
 
-        // ── Stats ─────────────────────────────────────────────────────────────
         setItem(11, GuiItem.of(GuiItem.STATS,
             "&6&lMis Estadísticas",
             "&7Rango: " + rank.formatted(),
             "&7ELO: &e" + stats.getElo(),
-            "&7Victorias: &a" + stats.getWins() + " &7| Derrotas: &c" + stats.getLosses()
-                + " &7| Empates: &7" + stats.getDraws(),
+            "&7Victorias: &a" + stats.getWins() + " &7| Derrotas: &c" + stats.getLosses(),
             "&7Win Rate: &e" + String.format("%.1f%%", stats.getWinRate()),
             "&7Racha: &e" + stats.getWinStreak() + " &8| Mejor: &e" + stats.getBestWinStreak(),
-            "&7Temporada: &e" + CobbleRanked.config.getSeasonName(),
-            "",
-            "&7Click para ver detalles"
+            "", "&7Click para ver detalles"
         ), () -> new PlayerStatsGui(player).open());
 
-        // ── Leaderboard ───────────────────────────────────────────────────────
         setItem(13, GuiItem.of(GuiItem.LEADERBOARD,
             "&6&lLeaderboard Ranked",
-            "&7Top " + CobbleRanked.config.getLeaderboardSize() + " jugadores por ELO",
-            "&7Temporada: &e" + CobbleRanked.config.getSeasonName(),
-            "",
-            "&7Click para ver"
+            "&7Top " + CobbleRanked.config.getLeaderboardSize() + " jugadores",
+            "", "&7Click para ver"
         ), () -> new LeaderboardGui(player).open());
 
-        // ── Liga ──────────────────────────────────────────────────────────────
-        long gyms   = LeagueStorage.getMembersByRole(LeagueMember.Role.GYM_LEADER).size();
-        long e4     = LeagueStorage.getMembersByRole(LeagueMember.Role.ELITE_FOUR).size();
-        long champs = LeagueStorage.getMembersByRole(LeagueMember.Role.CHAMPION).size();
-
+        long gyms = LeagueStorage.getMembersByRole(LeagueMember.Role.GYM_LEADER).size();
+        long e4 = LeagueStorage.getMembersByRole(LeagueMember.Role.ELITE_FOUR).size();
+        
         setItem(15, GuiItem.of(GuiItem.LEAGUE_INFO,
             "&d&lLiga Pokémon",
             "&7Líderes: &e" + gyms + "/8",
             "&7Alto Mando: &e" + e4 + "/4",
-            "&7Campeón: &e" + (champs > 0 ? "&a✔" : "&cVacante"),
-            "",
-            "&7Click para ver la liga"
+            "", "&7Click para ver la liga"
         ), () -> new LeagueInfoGui(player).open());
 
-        // ── Cola ──────────────────────────────────────────────────────────────
         boolean inRanked = MatchmakingQueue.isInQueue(player.getUuid(), QueueType.RANKED);
         boolean inLeague = MatchmakingQueue.isInQueue(player.getUuid(), QueueType.LEAGUE);
-        boolean inAny    = inRanked || inLeague;
 
-        setItem(29, GuiItem.of(inAny ? GuiItem.QUEUE_LEAVE : GuiItem.QUEUE_JOIN,
-            inAny ? "&c&lSalir de la Cola" : "&a&lCola Ranked",
-            inAny ? "&7Actualmente en cola: &e" + (inRanked ? "Ranked" : "Liga")
-                  : "&7Únete a la cola Ranked",
-            "&7Jugadores en Ranked: &e" + MatchmakingQueue.queueSize(QueueType.RANKED),
-            "&7Distancia máx: &e50 bloques",
-            "",
-            inAny ? "&cClick para salir de la cola" : "&aClick para unirte"
+        setItem(29, GuiItem.of(inRanked ? GuiItem.QUEUE_LEAVE : GuiItem.QUEUE_JOIN,
+            inRanked ? "&c&lSalir de la Cola Ranked" : "&a&lCola Ranked",
+            inRanked ? "&7Estás buscando oponente..." : "&7Únete a la cola Ranked",
+            "&7Jugadores: &e" + MatchmakingQueue.queueSize(QueueType.RANKED),
+            "", inRanked ? "&cClick para salir" : "&aClick para unirte"
         ), () -> {
-            if (MatchmakingQueue.isInAnyQueue(player.getUuid())) {
-                MatchmakingQueue.leaveAll(player.getUuid());
-            } else {
-                MatchmakingQueue.join(player, QueueType.RANKED);
-            }
-            new PlayerMainGui(player).open(); // refresh
+            if (inRanked) MatchmakingQueue.leaveAll(player.getUuid());
+            else MatchmakingQueue.join(player, QueueType.RANKED);
+            new PlayerMainGui(player).open();
         });
 
-        setItem(33, GuiItem.of(GuiItem.QUEUE_JOIN,
-            "&d&lCola Liga",
-            "&7Únete para retar a líderes",
-            "&7Jugadores en Liga: &e" + MatchmakingQueue.queueSize(QueueType.LEAGUE),
-            "&7Distancia máx: &e50 bloques",
-            "",
-            inAny ? "&cSal de la cola actual primero" : "&dClick para unirte"
+        // CORRECCIÓN: Botón ahora permite salir explícitamente de la cola de Liga
+        setItem(33, GuiItem.of(inLeague ? GuiItem.QUEUE_LEAVE : GuiItem.QUEUE_JOIN,
+            inLeague ? "&c&lSalir de la Cola Liga" : "&d&lCola Liga",
+            inLeague ? "&7Buscando líder disponible..." : "&7Únete para retar a líderes",
+            "&7Jugadores: &e" + MatchmakingQueue.queueSize(QueueType.LEAGUE),
+            "", inLeague ? "&cClick para salir" : "&dClick para unirte"
         ), () -> {
-            if (!MatchmakingQueue.isInAnyQueue(player.getUuid())) {
-                MatchmakingQueue.join(player, QueueType.LEAGUE);
-                new PlayerMainGui(player).open();
-            }
+            if (inLeague) MatchmakingQueue.leaveAll(player.getUuid());
+            else MatchmakingQueue.join(player, QueueType.LEAGUE);
+            new PlayerMainGui(player).open();
         });
 
-        // ── Historial ─────────────────────────────────────────────────────────
         setItem(31, GuiItem.of(GuiItem.HISTORY,
             "&b&lHistorial de Batallas",
-            "&7Tus últimas 5 batallas ranked",
-            "",
-            "&7Click para ver"
+            "&7Tus últimas 5 batallas",
+            "", "&7Click para ver"
         ), () -> new BattleHistoryGui(player).open());
 
-        // ── Cerrar ────────────────────────────────────────────────────────────
-        setItem(40, GuiItem.of(GuiItem.CLOSE, "&c&lCerrar",
-            "&7Cierra el menú"
-        ), player::closeHandledScreen);
+        setItem(40, GuiItem.of(GuiItem.CLOSE, "&c&lCerrar"), player::closeHandledScreen);
     }
 }

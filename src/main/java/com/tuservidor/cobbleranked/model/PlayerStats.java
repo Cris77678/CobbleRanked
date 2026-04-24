@@ -18,7 +18,8 @@ public class PlayerStats {
     private List<BattleRecord> history;
 
     public PlayerStats() {
-        this.elo = 1000;
+        // CORRECCIÓN: Respetar la configuración en lugar de hardcodear 1000
+        this.elo = com.tuservidor.cobbleranked.CobbleRanked.config.getStartingElo();
         this.wins = 0;
         this.losses = 0;
         this.draws = 0;
@@ -48,14 +49,14 @@ public class PlayerStats {
     }
 
     public void addBattleRecord(BattleRecord record) {
-        history.add(0, record); // newest first
-        if (history.size() > 20) history = history.subList(0, 20); // keep last 20
+        history.add(0, record); 
+        if (history.size() > 20) history = history.subList(0, 20); 
     }
 
     @Data
     public static class BattleRecord {
         private String opponentName;
-        private String result; // WIN, LOSS, DRAW
+        private String result;
         private int eloBefore;
         private int eloAfter;
         private long timestamp;

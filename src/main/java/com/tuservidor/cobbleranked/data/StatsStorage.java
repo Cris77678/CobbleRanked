@@ -17,8 +17,6 @@ public class StatsStorage {
     private static final String DATA_DIR = "config/cobbleranked/players/";
     private static final ConcurrentHashMap<UUID, PlayerStats> cache = new ConcurrentHashMap<>();
 
-    // ── Public API ────────────────────────────────────────────────────────────
-
     public static PlayerStats get(UUID uuid, String name) {
         return cache.computeIfAbsent(uuid, id -> {
             PlayerStats s = load(id);
@@ -26,6 +24,24 @@ public class StatsStorage {
             else s.setLastName(name);
             return s;
         });
+    }
+
+    // CORRECCIÓN: Método nuevo para buscar jugadores offline desde comandos
+    public static PlayerStats getByName(String name) {
+        for (PlayerStats stats : cache.values()) {
+            if (stats.getLastName().equalsIgnoreCase(name)) return stats;
+        }
+        try {
+            Path dir = Path.of(DATA_DIR);
+            if (Files.exists(dir)) {
+                return Files.list(dir).map(p -> {
+                    try { return GSON.fromJson(Files.readString(p), PlayerStats.class); } 
+                    catch (Exception e) { return null; }
+                }).filter(s -> s != null && s.getLastName().equalsIgnoreCase(name))
+                  .findFirst().orElse(null);
+            }
+        } catch (IOException ignored) {}
+        return null;
     }
 
     public static void save(PlayerStats stats) {
@@ -39,7 +55,6 @@ public class StatsStorage {
     }
 
     public static List<PlayerStats> getLeaderboard(int limit) {
-        // Load all from disk + merge with cache
         Map<UUID, PlayerStats> all = new HashMap<>(cache);
         try {
             Path dir = Path.of(DATA_DIR);
@@ -47,9 +62,7 @@ public class StatsStorage {
                 Files.list(dir).forEach(p -> {
                     try {
                         PlayerStats s = GSON.fromJson(Files.readString(p), PlayerStats.class);
-                        if (s != null && s.getUuid() != null) {
-                            all.putIfAbsent(s.getUuid(), s);
-                        }
+                        if (s != null && s.getUuid() != null) all.putIfAbsent(s.getUuid(), s);
                     } catch (Exception ignored) {}
                 });
             }
@@ -62,7 +75,6 @@ public class StatsStorage {
             .collect(Collectors.toList());
     }
 
-    /** Reset all ELO/wins/losses for a new season */
     public static void resetAll(int newSeason) {
         try {
             Path dir = Path.of(DATA_DIR);
@@ -72,12 +84,8 @@ public class StatsStorage {
                     PlayerStats s = GSON.fromJson(Files.readString(p), PlayerStats.class);
                     if (s == null) return;
                     s.setElo(CobbleRanked.config.getStartingElo());
-                    s.setWins(0);
-                    s.setLosses(0);
-                    s.setDraws(0);
-                    s.setWinStreak(0);
-                    s.setSeason(newSeason);
-                    s.getHistory().clear();
+                    s.setWins(0); s.setLosses(0); s.setDraws(0); s.setWinStreak(0);
+                    s.setSeason(newSeason); s.getHistory().clear();
                     Files.writeString(p, GSON.toJson(s));
                     cache.put(s.getUuid(), s);
                 } catch (Exception ignored) {}
@@ -87,27 +95,25 @@ public class StatsStorage {
         }
     }
 
-    // ── Internal ──────────────────────────────────────────────────────────────
-
     private static PlayerStats load(UUID uuid) {
         Path file = playerFile(uuid);
         if (!Files.exists(file)) return null;
-        try {
-            return GSON.fromJson(Files.readString(file), PlayerStats.class);
-        } catch (IOException e) {
-            CobbleRanked.LOGGER.error("Failed to load stats for {}", uuid);
-            return null;
-        }
+        try { return GSON.fromJson(Files.readString(file), PlayerStats.class); } 
+        catch (IOException e) { return null; }
     }
 
     private static void saveAsync(PlayerStats stats) {
+        // CORRECCIÓN: Prevención de Spam. No guarda archivos de jugadores que solo se conectaron sin jugar
+        if (stats.getTotalGames() == 0 && stats.getElo() == CobbleRanked.config.getStartingElo()) {
+            return; 
+        }
         CobbleRanked.runAsync(() -> {
             try {
                 Path file = playerFile(stats.getUuid());
                 Files.createDirectories(file.getParent());
                 Files.writeString(file, GSON.toJson(stats));
             } catch (IOException e) {
-                CobbleRanked.LOGGER.error("Failed to save stats for {}", stats.getUuid());
+                CobbleRanked.LOGGER.error("Failed to save stats", e);
             }
         });
     }
